@@ -1,0 +1,24 @@
+type=Single
+ptype=SubStr
+pattern=SEC_STARTUP
+context=SEC_INTERNAL_EVENT
+continue=TakeNext
+desc=Load the Storable module and terminate if it is not found
+action=eval %ret (require Storable); \
+       if %ret ( logonly Storabe loaded ) else ( eval %o exit(1) )
+
+type=Single
+ptype=SubStr
+pattern=SEC_STARTUP
+context=SEC_INTERNAL_EVENT
+desc=Restore all SEC contexts from /var/lib/sec/SEC_CONTEXTS on startup
+action=lcall %ret -> ( sub { %main::context_list = \
+       %{Storable::retrieve("/var/lib/sec/SEC_CONTEXTS")}; } )
+
+type=Single
+ptype=SubStr
+pattern=SEC_SHUTDOWN
+context=SEC_INTERNAL_EVENT
+desc=Save all SEC contexts into /var/lib/sec/SEC_CONTEXTS on shutdown
+action=lcall %ret -> ( sub { \
+       Storable::store(\%main::context_list, "/var/lib/sec/SEC_CONTEXTS"); } )

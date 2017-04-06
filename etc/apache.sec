@@ -1,0 +1,186 @@
+type=Options
+joincfset=apache-rules
+procallin=no
+
+
+############### Preliminary correlation
+# For measuring unique events etc
+# TakeNext should be used
+
+
+
+# Catch IPs doing too many HTTP requests
+# PS! will fire off from NAT traffic, therefore only useful for cross-correlation
+type=SingleWithThreshold
+ptype=RegExp
+continue=TakeNext
+pattern=(?:[\w.-]+) apache: (?:\S+)? (?<src_ip>(?:[a-f\d.:]+)).*"
+desc=More than 300 HTTP requests within 60 seconds from $+{src_ip}
+action=event NOTIFY_S-$+{src_ip}_T-_TN-_TT-HOST_PN-Too many HTTP requests within 1 minute_PP-apache_PE-%s_URL-_ENDEVENT
+window=60
+thresh=300
+
+
+# Catch IPs that are getting too many 4xx or 5xx HTTP responses
+# PS! will fire off from NAT traffic, therefore only useful for cross-correlation
+type=SingleWithThreshold
+ptype=RegExp
+continue=TakeNext
+pattern=(?<tgt_name>[\w.-]+) apache:\s?\S+? (?<src_ip>[a-f\d:.]+).+? (?<responsecode>[45]\d\d) \d+ ".+" "(?<useragent>.+)?"$
+desc=More than 20 errorneous HTTP requests from $+{src_ip}
+action=event NOTIFY_S-$+{src_ip}_T-_TN-$+{tgt_name}_TT-HOST_PN-Too many errorneous HTTP requests within 1 minute_PP-apache_PE-Last match: Response code $+{responsecode} from server $+{tgt_name}_URL-_ENDEVENT
+window=60
+thresh=20
+
+
+# Multiple useragents from common IP
+# PS! will fire off from NAT traffic, therefore only useful for cross-correlation
+# (?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+? \d+ ".+" "(?<useragent>.+)?"$
+type=EventGroup
+init=create USERAGENT_COUNTING_$+{remote_IP}
+end=delete USERAGENT_COUNTING_$+{remote_IP}
+continue=TakeNext
+ptype=RegExp
+pattern=(?<server>[\w.-]+) apache:\s?\S+? (?<remote_IP>[a-f\d:.]+).*? \d+ ".+" "(?<useragent>.+)?"$
+context=!USERAGENT_COUNTED_$+{remote_IP}_$+{useragent}
+count=alias USERAGENT_COUNTING_$+{remote_IP} USERAGENT_COUNTED_$+{remote_IP}_$+{useragent}
+desc=Multiple distinct useragents from $+{remote_IP}
+action=event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-HOST_PN-Multiple distinct user-agents detected for single IP_PP-apache_PE-Last match: on $+{server}_URL-_ENDEVENT
+window=172800
+thresh=3
+
+# Nasty tools often used by Red Teamers
+type=Single
+ptype=RegExp
+continue=TakeNext
+pattern=(?<tgt_name>[\w.-]+) apache: (?<vhost>\S+)? (?<src_ip>(?:[a-f\d.:]+)).+"(?<evidence>.*((?i)sqlmap|owasp|dirbuster|nikto|badtunnel|nmap).*)"
+desc=$+{src_ip} | $+{evidence} | Suspicious user-agent
+action=event NOTIFY_S-$+{src_ip}_T-_TN-$+{tgt_name}_TT-HOST_PN-Suspicious user-agent detected_PP-apache_PE-$+{vhost} - $+{evidence}_URL-_ENDEVENT
+
+# Empty user-agent
+type=Single
+ptype=RegExp
+continue=TakeNext
+pattern=(?<tgt_name>[\w.-]+) apache: (?<vhost>\S+)? (?<src_ip>(?:[a-f\d.:]+)).+(?:"-" "-")$
+desc=$+{vhost} | $+{scr_ip} | $+{tgt_name} | webapp user-agent: non-existent
+action=event NOTIFY_S-$+{src_ip}_T-_TN-$+{tgt_name}_TT-HOST_PN-Empty user-agent_PP-apache_PE-Empty user-agent used when accessing $+{tgt_name} - $+{vhost}_URL-_ENDEVENT
+
+############# Injection attempts
+# OS command injection
+
+# Path traversal
+type=Single
+ptype=RegExp
+continue=TakeNext
+pattern=(?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+(?:(?i:\.|\%2e){2,}(?:(?i:/|\\|\%2f|%c0%af)+)){2,}
+desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp injection: directory traversal
+action=logonly; event OSCOMMAND_INJECTION_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-Path traversal_PP-apache_PE-%s_URL-_ENDEVENT
+
+# /etc/passwd inclusion attempt
+type=Single
+ptype=RegExp
+pattern=(?<server>[\w.-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+(?:etc\/\W*passwd)
+desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp injection: etc/passwd inclusion
+action=logonly; event OSCOMMAND_INJECTION_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-/etc/passwd inclusion_PP-apache_PE-%s_URL-_ENDEVENT
+
+
+# Code injection
+
+# Simple script tags
+type=Single
+ptype=RegExp
+continue=TakeNext
+pattern=(?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+(?i:(?i:<|%3c)/?script(?i:>|%3e))
+desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp injection: script tags
+action=logonly; event CODE_INJECTION_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-%s_PP-apache_PE-%s_URL-_ENDEVENT
+
+# Javascript injection
+type=Single
+ptype=RegExp
+continue=TakeNext
+pattern=(?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+(?:javascript\:)
+desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp injection: javascript
+action=logonly; event CODE_INJECTION_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-%s_PP-apache_PE-%s_URL-_ENDEVENT
+
+
+# SQL injection
+
+# SELECT * FROM
+type=Single
+ptype=RegExp
+pattern=(?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+(?i:select%\S*from)
+desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp injection: SQL SELECT FROM statement
+action=logonly; event SQL_INJECTION_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-%s_PP-apache_PE-%s_URL-_ENDEVENT
+
+# UNION SELECT
+type=Single
+ptype=RegExp
+pattern=(?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+(?i:union\S*select)
+desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp injection: SQL UNION SELECT statement
+action=logonly; event SQL_INJECTION_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-%s_PP-apache_PE-%s_URL-_ENDEVENT
+
+# Blind sqli testing with sleep() and benchmark()
+type=Single
+ptype=RegExp
+continue=TakeNext
+pattern=(?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+(?i:(sleep\((\s*)(\d*)(\s*)\)|benchmark\((.*)\,(.*)\)))
+desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp injection: Blind SQLi testing with sleep() or benchmark()
+action=logonly; event SQL_INJECTION_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-%s_PP-apache_PE-%s_URL-_ENDEVENT
+
+# Comment injection
+type=Single
+ptype=RegExp
+continue=TakeNext
+pattern=(?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+(?:\<!-|--\>|\/\*|\*\/)
+desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp injection: common comment types
+action=logonly; event COMMENT_INJECTION_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-%s_PP-apache_PE-%s_URL-_ENDEVENT
+
+# NULL byte injection
+# %00
+type=Single
+ptype=RegExp
+continue=TakeNext
+pattern=(?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+%00
+desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp injection: null byte
+action=logonly; event BYTE_INJECTION_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-%s_PP-apache_PE-%s_URL-_ENDEVENT
+
+# PHPIDS
+type=Single
+ptype=RegExp
+continue=TakeNext
+pattern=(?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+(?:(@import|;base64|alert[\s]?\(|expression[\s]?\(|urn[\s]?\(|fromCharcode[\s]?\(|decodeURIComponent[\s]?\(|eval[\s]?\(|Execute[\s]?\())
+desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp injection: imported poisoned stylesheets, base64 attacks, vbscript probings and typical js injections
+action=logonly; event CODE_INJECTION_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-%s_PP-apache_PE-%s_URL-_ENDEVENT
+
+#######################################################################################
+# known exploit patterns
+
+type=Single
+ptype=RegExp
+continue=TakeNext
+pattern=(?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+//myadtoolz.net
+desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp exploit
+action=logonly; event EXPLOIT_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-%s_PP-apache_PE-%s_URL-_ENDEVENT
+
+#type=Single
+#ptype=RegExp
+#pattern=(?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+cgi-bin.+((?:%\w{2})\+?)+ HTTP
+#desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp exploit: cgi-bin
+#action=logonly; event CGIBIN_EXPLOIT_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-%s_PP-apache_PE-%s_URL-_ENDEVENT
+
+type=Single
+ptype=RegExp
+continue=TakeNext
+pattern=(?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+/\w+/(?:zologize|scripts)/\w+\.php
+desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp exploit: myadmin
+action=logonly; event MYADMIN_EXPLOIT_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-%s_PP-apache_PE-%s_URL-_ENDEVENT
+
+###########################
+# Strange user agent
+
+type=Single
+ptype=RegExp
+pattern=(?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+(?i:"BOT/0\.1 \(BOT for JCE\)")$
+desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp user-agent: JCE BOT
+action=logonly; event JCEBOT_USERAGENT_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-%s_PP-apache_PE-%s_URL-_ENDEVENT
+

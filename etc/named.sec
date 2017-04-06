@@ -1,0 +1,38 @@
+type=Options
+joincfset=named-rules
+procallin=no
+
+# DNS Amplification DDoS attack
+
+type=SingleWithThreshold
+ptype=RegExp
+pattern=client (?<remote_IP>[a-f\d:.]+).+?(?:view authoritative: query: (?<domain>[\w\d\.]+) IN ANY \+E)
+desc=$+{remote_IP} | $+{domain} | Possible DNS amplification attack
+action=logonly; event DNS_AMP_ATTACK_$+{remote_IP}_$+{domain}
+continue=TakeNext
+window=5
+thresh=3
+
+# Server still logs queries, even if they are denied
+# If denied log entry is observed then IP will not be blocked (there simply is no point)
+
+type=PairWithWindow
+ptype=RegExp
+pattern=DNS_AMP_ATTACK_(?<remote_IP>[a-f\d:.]+)_(?<domain>[\w\d\.]+)
+desc=$1 | $2 | Not denied DNS amplification attack
+action=logonly
+ptype2=RegExp
+pattern2=client $1.+?\($2\): view authoritative: query \(cache\).+denied
+desc2=%1 | %2 | Denied DNS amplification attack
+action2=logonly
+window=5
+
+# DNS enumeration
+# Apr 22 11:07:06 ns3 named[29809]: security: error: client <REMOTE_IP>#43836: view authoritative: zone transfer '<DNS_ZONE>/AXFR/IN' denied
+# Optional - email notification
+
+type=Single
+ptype=RegExp
+pattern=client (?<remote_IP>[a-f\d:.]+).+?(?:view authoritative: zone transfer '(?<domain>\S+)/AXFR/IN' denied)
+desc=$+{remote_IP} | $+{domain} | Failed zone transfer: possible enumeration attack
+action=logonly; event DNS_ENUM_$+{remote_IP}_$+{domain}

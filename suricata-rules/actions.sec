@@ -1,0 +1,55 @@
+type=Options
+joincfset=action-rules
+procallin=no
+
+#type=Suppress
+#ptype=RegExp
+#pattern=\b(?:127\.0\.0\.)
+#desc=Suppress known good IP ranges
+
+#type=Suppress
+#ptype=RegExp
+#pattern=(?:ICMP_INFO PING|Linux APT User-Agent Outbound likely related to package management)
+#desc=Suppress benign stuff
+
+type=Suppress
+ptype=SubStr
+pattern=NOTIFY_S-127.0.0.1_T-_TN-www.clf.ex_TT-HOST_PN-Too many errorneous HTTP requests within 1 minute_PP-apache
+desc=Suppress some stupid local error
+
+type=Suppress
+ptype=RegExp
+pattern=(?:NOTIFY_S-2a07:1181:0130:3603:0000:0000:0000:0004|NOTIFY_S-2a07:1181:0130:3603::4|NOTIFY_S-198\.18\.3\.4|check_http/v[\d.]+ (nagios-plugins [\d.]+)|check_http/v[\d.]+ \(monitoring-plugins [\d.]+\))
+desc=Suppress nagios stuff for now. FIXME later.
+
+type=Suppress
+ptype=RegExp
+pattern=S-(?:4.5.6.7)_TN-_TT-host_PN-Potential Corporate Privacy Violation_PP-IDS_PE-ET POLICY Outgoing Basic Auth Base64 HTTP Password detected unencrypted_
+desc=Suppress HTTP honeypot alerts
+
+
+#If the IP4 address ends in 255 or is part of multicast IP range AND the target type is "host", change the target type to "network"
+type=Single
+ptype=RegExp
+continue=DontCont
+pattern=^NOTIFY_S-(?<src_ip>[a-f\d.:]*)_T-(?<tgt_ip>(?:[a-f\d.:]+\.255|239\.255\.255\.250|239\.255\.255\.253|224\.0\.))_TN-(?<tgt_name>[\w.-]*?)_TT-((?i)host)_PN-(?<payloadname>.*?)_PP-(?<probe>.*?)_PE-(?<evidence>.*)_URL-(?<url>.*)_ENDEVENT$
+desc=Detected broadcast or multicast address - changing to "network" event
+action=event NOTIFY_S-$+{src_ip}_T-$+{tgt_ip}_TN-$+{tgt_name}_TT-network_PN-$+{payloadname}_PP-$+{probe}_PE-$+{evidence}_URL-$+{url}_ENDEVENT
+
+
+type=Single
+ptype=RegExp
+continue=EndMatch
+pattern=^NOTIFY_S-(?<src_ip>[a-f\d.:]*)_T-(?<tgt_ip>[a-f\d.:]*)_TN-(?<tgt_name>[\w.-]*?)_TT-(?<tgt_type>.*?)_PN-(?<payloadname>.*?)_PP-(?<probe>.*?)_PE-(?<evidence>.*)_URL-(?<url>.*)_ENDEVENT$
+context=!SENT_$+{src_ip}_$+{tgt_ip}_$+{tgt_name}_$+{tgt_type}_$+{payloadname}_$+{probe}_$+{evidence}_$+{url}
+desc=Sending_$+{src_ip}_$+{tgt_ip}_$+{tgt_name}_$+{tgt_type}_$+{payloadname}_$+{probe}_$+{evidence}_$+{url}
+action=create SENT_$0 60; \
+shellcmd /usr/bin/python /opt/SEC-IPS/scripts/send_to_eve.py -s "$+{src_ip}" -t "$+{tgt_ip}" --tname "$+{tgt_name}" --ttype "$+{tgt_type}" --attack "$+{src_ip}->$+{tgt_ip}[$+{tgt_name}]: $+{payloadname}" --probe "$+{probe}" --evidence "$+{evidence}" --url "$+{url}"; \
+shellcmd /usr/bin/python /opt/SEC-IPS/scripts/send_to_alerta.py -s "$+{src_ip}" -t "$+{tgt_ip}" --tname "$+{tgt_name}" --ttype "$+{tgt_type}" --attack "$+{src_ip}->$+{tgt_ip}[$+{tgt_name}]: $+{payloadname}" --probe "$+{probe}" --evidence "$+{evidence}" --url "$+{url}"
+
+
+
+
+#action=eval %ipv6 ( if (index("$+{src_ip}", ":") != -1 ) { return 1; } else { return 0; }); \
+#if %ipv6 ( shellcmd /usr/bin/python /opt/SEC-IPS/scripts/send_to_eve.py --s6 "$+{src_ip}" --t6 "$+{tgt_ip}" --tn "$+{tgt_name}" --tt "$+{tgt_type}" --pn "$+{src_ip}: $+{payloadname}" --pp "$+{probe}" --pe "$+{evidence}" ) \
+#    else ( shellcmd /usr/bin/python /opt/SEC-IPS/scripts/send_to_eve.py --s4 "$+{src_ip}" --t4 "$+{tgt_ip}" --tn "$+{tgt_name}" --tt "$+{tgt_type}" --pn "$+{src_ip}: $+{payloadname}" --pp "$+{probe}" --pe "$+{evidence}" );

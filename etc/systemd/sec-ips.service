@@ -1,0 +1,11 @@
+[Unit]
+Description=SEC IPS service
+After=syslog.target
+
+[Service]
+ExecStart=/opt/SEC-IPS/bin/sec --conf=/opt/SEC-IPS/etc/*.sec --input=/var/log/syslog --syslog=daemon --nodetach --intevents
+EnvironmentFile=/opt/SEC-IPS/etc/default/sec-notify
+Type=simple
+
+[Install]
+WantedBy=multi-user.target

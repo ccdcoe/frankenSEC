@@ -1,0 +1,84 @@
+type=Options
+joincfset=suricata-flows
+procallin=no
+
+# Scanning detection
+# 2017-02-06T06:25:03+00:00 suricata.yellow.ex suricata[5123]: @cee: {"timestamp":"2017-02-06T06:21:16.000447+0000","flow_id":1602545002693233,"event_type":"flow","src_ip":"198.18.2.37","src_port":41494,"dest_ip":"100.64.9.41","dest_port":5621,"proto":"TCP","flow":{"pkts_toserver":4,"pkts_toclient":0,"bytes_toserver":296,"bytes_toclient":0,"start":"2017-02-06T06:20:15.475761+0000","end":"2017-02-06T06:20:15.475765+0000","age":0,"state":"new","reason":"timeout"},"tcp":{"tcp_flags":"02","tcp_flags_ts":"02","tcp_flags_tc":"00","syn":true,"state":"syn_sent"}}
+
+
+
+
+type=SingleWithThreshold
+ptype=RegExp
+continue=TakeNext
+pattern=suricata\[[\d]+\]: \@cee: .+"event_type":"flow","src_ip":"(?<src_ip>[a-f\d.:]+)".+"dest_ip":"(?<dest_ip>[a-f\d.:]+)"
+desc=Counting flows per $+{src_ip} and $+{dest_ip}
+action=event NOTIFY_S-$+{src_ip}_T-$+{dest_ip}_TN-_TT-host_PN-Host scan detected_PP-IDS_PE-Potential port scan from $+{src_ip} to $+{dest_ip}_URL-_ENDEVENT
+window=60
+thresh=900
+
+#type=SingleWithThreshold
+#ptype=RegExp
+#continue=DontCont
+#pattern=suricata\[[\d]+\]: \@cee: .+"event_type":"flow","src_ip":"(?<src_ip>(?:1\.2\.8\.)\d+)".+"dest_ip":"(?<dest_ip>[a-f\d.:]+)"
+#desc=Counting flows per $+{src_ip}
+#action=event NOTIFY_S-$+{src_ip}_T-$+{dest_ip}_TN-_TT-host_PN-Scanning activity detected_PP-IDS_PE-Too many flows from $+{scr_ip}_URL-_ENDEVENT
+#window=60
+#thresh=2000
+
+
+
+#type=SingleWithThreshold
+#ptype=RegExp
+#pattern=suricata\[[\d]+\]: \@cee: .+"event_type":"flow","src_ip":"(?<src_ip>[a-f\d.:]+)".+?"dest_ip":"(?<dest_ip>[a-f\d.:]+)".+?"dest_port":(?<dest_port>\d+),
+#desc=Counting flows per $+{src_ip}
+#action=event NOTIFY_S-$+{src_ip}_T-$+{dest_ip}_TN-_TT-host_PN-Scanning activity detected_PP-IDS_PE-Too many flows from $+{scr_ip}_URL-_ENDEVENT
+#window=60
+#thresh=2000
+
+
+###############################################################
+# Sample SEC ruleset for "PORTSCAN FROM ip1 TO ip2:port" events
+#
+# Copyright (C) 2003-2009 Risto Vaarandi
+# This is free software. You may redistribute copies of it under the terms of
+# the GNU General Public License version 2.
+# There is NO WARRANTY, to the extent permitted by law.
+################################################################
+
+# process "PORTSCAN FROM ip1 TO ip2:port" events, and if a certain
+# source host has scanned the same destination port on more than
+# 10 distinct destination hosts during 60 seconds, raise an alarm
+
+#type=Single
+#ptype=RegExp
+#pattern=suricata\[[\d]+\]: \@cee: .+"event_type":"flow","src_ip":"(?<src_ip>[a-f\d.:]+)".+?"dest_ip":"(?<dest_ip>[a-f\d.:]+)".+?"dest_port":(?<dest_port>\d+),
+#context=!HORIZONTAL_PORTSWEEP_FROM_SOURCE_IP_$+{src_ip}_TO_TARGET_PORT_$+{dest_port}
+#continue=TakeNext
+#desc=Horizontal port sweep started from source $+{src_ip} to target port $+{dest_port}
+#action=eval %o ( $portscans{"$+{src_ip}:$+{dest_port}"} = {} ); \
+#       create HORIZONTAL_PORTSWEEP_FROM_SOURCE_IP_$+{src_ip}_TO_TARGET_PORT_$+{dest_port} 60 \
+#       eval %o ( delete $portscans{"$+{src_ip}:$+{dest_port}"} )
+#
+#type=Single
+#ptype=RegExp
+#pattern=suricata\[[\d]+\]: \@cee: .+"event_type":"flow","src_ip":"(?<src_ip>[a-f\d.:]+)".+?"dest_ip":"(?<dest_ip>[a-f\d.:]+)".+?"dest_port":(?<dest_port>\d+),
+#context=HORIZONTAL_PORTSWEEP_FROM_SOURCE_IP_$+{src_ip}_TO_TARGET_PORT_$+{dest_port}
+#continue=TakeNext
+#desc=Scanned destination IP: $+{dest_ip}
+#action=eval %o ( $portscans{"$+{src_ip}:$+{dest_port}"}->{$+{dest_ip}} = 1 ); \
+#       add HORIZONTAL_PORTSWEEP_FROM_SOURCE_IP_$+{src_ip}_TO_TARGET_PORT_$+{dest_port} %t: %s;\
+#       set HORIZONTAL_PORTSWEEP_FROM_SOURCE_IP_$+{src_ip}_TO_TARGET_PORT_$+{dest_port} 60 \
+#       eval %o ( delete $portscans{"$+{src_ip}:$+{dest_port}"} )
+#
+#type=Single
+#ptype=RegExp
+#pattern=PORTSCAN FROM ([\d.]+) TO ([\d.]+):(\d+)
+#context=HORIZONTAL_PORTSWEEP_FROM_SOURCE_IP_$+{src_ip}_TO_TARGET_PORT_$+{dest_port} \
+#        && =( scalar(keys(%{$portscans{"$+{src_ip}:$+{dest_port}"}})) > 10 )
+#continue=DontCont
+#desc=$+{src_ip} has scanned more than 10 destinations
+#action=report HORIZONTAL_PORTSWEEP_FROM_SOURCE_IP_$+{src_ip}_TO_TARGET_PORT_$+{dest_port} \
+#       delete HORIZONTAL_PORTSWEEP_FROM_SOURCE_IP_$+{src_ip}_TO_TARGET_PORT_$+{dest_port}; \
+#       eval %o ( delete $portscans{"$+{src_ip}:$+{dest_port}"} ); \
+#       event NOTIFY_S-$+{src_ip}_T-$+{dest_ip}_TN-_TT-host_PN-Horizontal port sweep_PP-IDS_PE-Horizontal port sweep from $+{src_ip} to target port $+{dest_port}_URL-_ENDEVENT

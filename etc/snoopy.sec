@@ -1,0 +1,20 @@
+type=Options
+joincfset=snoopy-rules
+procallin=no
+
+#2016-12-08T09:58:56+00:00 srv1.dev.clf.ex snoopy[14639]: [login:root ssh:(10.0.242.210 35336 10.0.242.63 22) username:root uid:0 group:root gid:0 sid:14639 tty:(none) cwd:/ filename:/usr/sbin/sshd]: /usr/sbin/sshd -R
+#2016-12-08T09:58:56+00:00 fuzzer.ops.ex snoopy[6787]: [login:(unknown) ssh:((undefined)) username:root uid:0 group:root gid:0 sid:6787 tty:(none) cwd:/ filename:/usr/sbin/sshd]: /usr/sbin/sshd -D -R
+
+type=Suppress
+ptype=RegExp
+pattern=snoopy\[[\d]+\]: \[.*ssh:\(.*?10\.0\.111\..* /usr/sbin/sshd -R
+desc=Suppress SSH probing from MGMT addresses
+
+
+
+#Very generic snoopy rule, place somewhere in the end of the file
+type=Single
+ptype=RegExp
+pattern=(?<tname>[\w.-]+) snoopy\[[\d]+\]: \[(?<evidence>.*login:(?<username>\S+) ssh:\((?<src_ip>[a-f\d:.]+).*)
+desc=Snoopy - Command execution using SSH
+action=event NOTIFY_S-$+{src_ip}_T-_TN-$+{tname}_TT-host_PN-Command execution by $+{username} over SSH_PP-snoopy_PE-$+{evidence}_URL-_ENDEVENT

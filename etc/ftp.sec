@@ -1,0 +1,21 @@
+type=Options
+joincfset=ftp-rules
+procallin=no
+
+type=Single
+ptype=RegExp
+pattern=(?<server>[\w-]+) pure-ftpd: \(\?@(?<remote_IP>\S+)\)\s+\[WARNING\] Authentication failed for user \[(?<username>\S*)\]
+desc=$+{server} | $+{remote_IP} | FTP authentication failure
+action=logonly; event FTP_AUTH_FAILURE_$+{server}_$+{remote_IP}_$+{username}
+
+type=Single
+ptype=RegExp
+pattern=(?<server>[\w-]+) vsftpd.+?(?:\[(?<username>\S*)\] FAIL LOGIN: Client "(?<remote_IP>[a-f\d:.]+))"
+desc=$+{server} | $+{remote_IP} | FTP authentication failure
+action=logonly; event FTP_AUTH_FAILURE_$+{server}_$+{remote_IP}_$+{username}
+
+type=Single
+ptype=RegExp
+pattern=(?<server>[\w-]+) vsftpd(?:\[\d+\])?: pam_unix.+authentication failure.+ruser=(?<username>\S*) rhost=(?<remote_IP>\S+)
+desc=$+{server} | $+{remote_IP} | FTP authentication failure
+action=logonly; event FTP_AUTH_FAILURE_$+{server}_$+{remote_IP}_$+{username}
