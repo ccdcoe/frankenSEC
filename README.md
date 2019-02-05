@@ -7,11 +7,11 @@ As the name may suggest, the contents are a Frankenstein monster of packaged SEC
 ## Basic operation
  * These rules expect that the events have been enriched by 'peek' (https://github.com/ccdcoe/go-peek).
  * In our environment setup, enriched events are consumed from Kafka by the simple-kafka-consumer (a python script that is a part of the overarching [Frankenstack repo](https://github.com/ccdcoe/frankenstack)) and its output is directed to a named pipe (fifo). SEC opens the named pipe with (--input) and processes incoming events.
-  * However, the rules are input source agnostic, so it does not matter how you feed SEC the input events.
+ * Note that the rules are input source agnostic, so it does not matter how you feed SEC the input events.
  * SEC rules are responsible for initial parsing, filtering, correlation and in many cases adds meaning to the events.
  * SEC writes relevant events (again) to a separate named pipe (fifo). These are read by a tool sec2alerta (bundled with this repo) we developed specifically for this purpose.
  * The tool sec2alerta makes sure the event has all the required fields for sending events to the [Alerta](https://alerta.io/) Server API. 
-  * NB! Note the alerta [de-duplication](https://docs.alerta.io/en/latest/server.html#de-duplication) and [correlation](https://docs.alerta.io/en/latest/server.html#simple-correlation) functionality. The rules are constructed in a way that sequences of events/alerts/attacks taking place between the same pair of hosts are correlated together under a single 'umbrella' event. The information from the latest event is prominent, but clicking on the alert reveals the previous (historical) events that have been correlated together.
+ * NB! Note the alerta [de-duplication](https://docs.alerta.io/en/latest/server.html#de-duplication) and [correlation](https://docs.alerta.io/en/latest/server.html#simple-correlation) functionality. The rules are constructed in a way that sequences of events/alerts/attacks taking place between the same pair of hosts are correlated together under a single 'umbrella' event. The information from the latest event is prominent, but clicking on the alert reveals the previous (historical) events that have been correlated together.
  * Events are visualized for the XS training audience (RT) on the [Alerta Dashboard](https://github.com/alerta/alerta). However, same information could be accessed on the command line using the alerta client.
 
 ## Versions
@@ -33,8 +33,8 @@ Mind the various directories and paths that are expected here. This only serves 
 
 
 ## Links
-SEC - https://simple-evcorr.github.io/
-peek - https://github.com/ccdcoe/go-peek
-simple-kafka-consumer - https://github.com/ccdcoe/frankenstack (/scripts)
-sec2alerta - https://github.com/ccdcoe/frankenSEC (/sec2alerta)
-alerta - https://alerta.io/ & https://github.com/alerta/alerta & https://github.com/markuskont/dockerfiles (/alerta)
+ * SEC - https://simple-evcorr.github.io/
+ * peek - https://github.com/ccdcoe/go-peek
+ * simple-kafka-consumer - https://github.com/ccdcoe/frankenstack (/scripts)
+ * sec2alerta - https://github.com/ccdcoe/frankenSEC (/sec2alerta)
+ * alerta - https://alerta.io/ & https://github.com/alerta/alerta & https://github.com/markuskont/dockerfiles (/alerta)
