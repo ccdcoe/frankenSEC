@@ -1,9 +1,0 @@
-type=Options
-joincfset=snort-rules
-procallin=no
-
-type=Single
-ptype=RegExp
-pattern=\[\d+:(?<snort_gid>\d+):\d+\].+\[Classification: (?<snort_classification>.+?)\] \[Priority: (?<snort_prio>\d+)\] {(?<snort_proto>\w+)} (?<remote_IP>\S+) -> (?<local_IP>\S+)$
-desc=$+{local_IP} | $+{remote_IP} | $+{snort_classification} | $+{snort_prio} | $+{snort_gid} Snort Alert
-action=logonly; event SNORT_IDS_ALERT_$+{local_IP}_$+{remote_IP}_$+{snort_prio}_$+{snort_gid}_$+{snort_proto}

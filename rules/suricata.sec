@@ -1,0 +1,32 @@
+type=Options
+joincfset=suricata-rules
+procallin=no
+
+type=Single
+ptype=Cached
+pattern=parsedjson
+continue=TakeNext
+context=!NOISYHOST_$+{gamemeta!Src!Host} || NOISYHOST_!$+{gamemeta!Dest!Host}
+desc=Suricata alert $+{gamemeta!Src!Host} -> $+{gamemeta!Dest!Host}: $+{alert!signature_id}
+action=lcall %json parsedjson :> ( sub { return JSON->new->utf8->allow_unknown->encode($_[0]); } ); \
+write %outputpipe %json;
+
+type=SingleWithThreshold
+ptype=Cached
+pattern=parsedjson
+context=!NOISYHOST_$+{gamemeta!Src!Host}
+continue=TakeNext
+desc=Noisy source host $+{gamemeta!Src!Host} for $+{alert!signature_id}
+thresh=5
+window=60
+action=create NOISYHOST_$+{gamemeta!Src!Host} 600; event NOISYHOST_$+{gamemeta!Src!Host}
+
+type=SingleWithThreshold
+ptype=Cached
+pattern=parsedjson
+context=!NOISYHOST_$+{gamemeta!Dest!Host}
+continue=TakeNext
+desc=Target host $+{gamemeta!Dest!Host} is getting hammered with $+{alert!signature_id}
+thresh=5
+window=60
+action=create NOISYHOST_$+{gamemeta!Dest!Host} 60; event NOISYHOST_$+{gamemeta!Dest!Host}

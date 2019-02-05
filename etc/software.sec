@@ -1,6 +1,0 @@
-type=Single
-ptype=RegExp
-pattern= (?<server>(?<!nagios).+) \w\[[\d]+\]: .+(?:username=nagios|/lib/nagios3?/|/nagios3?/plugins|/nagios3?/libexec/).+
-desc=Nagios detected on a non-Nagios machine $+{server}
-action=event NOTIFY_S-$+{server}_T-_TN-$+{server}_TT-HOST_PN-Suspicious software: Nagios_PP-syslogs_PE-%s_URL-_ENDEVENT
-

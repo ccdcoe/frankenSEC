@@ -1,0 +1,64 @@
+type=Options
+joincfset=sshd-rules
+procallin=no
+
+### TODO: This file still has legacy rules. Should be rewritten to make use of SecJson::alertajson module ###
+
+# Login failures and successes #
+type=Single
+ptype=cached
+pattern=parsedjson
+continue=TakeNext
+context=parsedjson :> ( sub { return ((index $_[0]->{"message"},"Failed ") >= 0 ); } )
+desc=SSH login failed: $+{message}
+action=lcall %user $+{message} -> ( sub { my @matches = ( $_[0] =~ /(?:Failed) [\w-]+ for (?:invalid user )?([\S]+) from (?:[a-f\d.:]+) port (?:\d+) ssh2/g ); return $matches[0]; } ); \
+lcall %ip $+{message} -> ( sub { my @matches = ( $_[0] =~ /(?:Failed) [\w-]+ for (?:invalid user )?(?:[\S]+) from ([a-f\d.:]+) port (?:\d+) ssh2/g ); return $matches[0]; } ); \
+lcall %port $+{message} -> ( sub { my @matches = ( $_[0] =~ /(?:Failed) [\w-]+ for (?:invalid user )?(?:[\S]+) from (?:[a-f\d.:]+) port (\d+) ssh2/g ); return $matches[0]; } ); \
+assign %output "resource":"$+{gamemeta!Host}","event":"%ip -> $+{gamemeta!Host}","correlate":["%ip -> $+{gamemeta!Host}","$+{gamemeta!Host} -> %ip"],"severity":"minor","value":"Failed SSH login for user %user","text":"$+{message}","origin":"$+{topic}","service":["$+{program}"],"type":"$+{facilty}","attributes":{},"tags":[],"group":null,"timeout":900,"environment":"Production","rawData":null; \
+create SSH_FAILED_$+{gamemeta!Host} 600; \
+write %outputpipe {"timestamp":%{u},%output}
+
+type=Single
+ptype=cached
+pattern=parsedjson
+continue=TakeNext
+context=parsedjson :> ( sub { return ((index $_[0]->{"message"},"Accepted ") >= 0 ); } )
+desc=SSH login successful: $+{message}
+action=lcall %ip $+{message} -> ( sub { my @matches = ( $_[0] =~ /(?:Accepted) [\w-]+ for (?:invalid user )?(?:[\S]+) from ([\d.:]+) port (?:\d+) ssh2/g ); return $matches[0]; } ); \
+lcall %port $+{message} -> ( sub { my @matches = ( $_[0] =~ /(?:Accepted) [\w-]+ for (?:invalid user )?(?:[\S]+) from (?:[\d.:]+) port (\d+) ssh2/g ); return $matches[0]; } ); \
+create SSH_ACTIVE_$+{gamemeta!Host}_%ip_%port 180
+
+type=Single
+ptype=cached
+pattern=parsedjson
+continue=TakeNext
+context=SSH_FAILED_$+{gamemeta!Host} && parsedjson :> ( sub { return ((index $_[0]->{"message"},"Accepted ") >= 0 ); } )
+desc=SSH login successful after failed attempts on $+{gamemeta!Host}
+action=lcall %ip $+{message} -> ( sub { my @matches = ( $_[0] =~ /(?:Accepted) [\w-]+ for (?:[\S]+) from ([\d.:]+) port (?:\d+) ssh2/g ); return $matches[0]; } ); \
+lcall %port $+{message} -> ( sub { my @matches = ( $_[0] =~ /(?:Accepted) [\w-]+ for (?:[\S]+) from (?:[\d.:]+) port (\d+) ssh2/g ); return $matches[0]; } ); \
+assign %output "resource":"$+{gamemeta!Host}","event":"%ip -> $+{gamemeta!Host}","correlate":["%ip -> $+{gamemeta!Host}","$+{gamemeta!Host} -> %ip"],"severity":"minor","value":"Successful SSH login for after a failed login attempt","text":"$+{message}","origin":"$+{topic}","service":["$+{program}"],"type":"$+{facilty}","attributes":{},"tags":[],"group":null,"timeout":900,"environment":"Production","rawData":null; \
+write %outputpipe {"timestamp":%{u},%output}
+
+
+
+# Other more specifc SSH errors #
+type=Single
+ptype=cached
+pattern=parsedjson
+continue=TakeNext
+context=parsedjson :> ( sub { return ((index $_[0]->{"message"},"Protocol major versions differ for ") >= 0 ); } )
+desc=SSH protocol version difference: $+{message}
+action=lcall %ip $+{message} -> ( sub { my @matches = ( $_[0] =~ /Protocol major versions differ for ([a-f\d.:]+): (?:.+)$/g ); return $matches[0]; } ); \
+assign %output "resource":"$+{gamemeta!Host}","event":"%ip -> $+{gamemeta!Host}","correlate":["%ip -> $+{gamemeta!Host}","$+{gamemeta!Host} -> %ip"],"severity":"minor","value":"SSH protocol difference","text":"$+{message}","origin":"$+{topic}","service":["$+{program}"],"type":"$+{facilty}","attributes":{},"tags":[],"group":null,"timeout":900,"environment":"Production","rawData":null; \
+write %outputpipe {"timestamp":%{u},%output}
+
+type=Single
+ptype=cached
+pattern=parsedjson
+continue=TakeNext
+context=parsedjson :> ( sub { return ((index $_[0]->{"message"},"no matching host key type found") >= 0 ); } )
+desc=No matching host key type found: $+{message}
+action=lcall %ip $+{message} -> ( sub { my @matches = ( $_[0] =~ /fatal: Unable to negotiate with ([a-f\d.:]+) port (?:\d+): no matching host key type found. Their offer: .+/g ); return $matches[0]; } ); \
+lcall %port $+{message} -> ( sub { my @matches = ( $_[0] =~ /fatal: Unable to negotiate with (?:[a-f\d.:]+) port (\d+): no matching host key type found. Their offer: .+/g ); return $matches[0]; } ); \
+assign %output "resource":"$+{gamemeta!Host}","event":"%ip -> $+{gamemeta!Host}","correlate":["%ip -> $+{gamemeta!Host}","$+{gamemeta!Host} -> %ip"],"severity":"minor","value":"SSH connection negotiation failed","text":"$+{message}","origin":"$+{topic}","service":["$+{program}"],"type":"$+{facilty}","attributes":{},"tags":[],"group":null,"timeout":900,"environment":"Production","rawData":null; \
+write %outputpipe {"timestamp":%{u},%output}

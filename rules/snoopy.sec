@@ -1,0 +1,48 @@
+type=Options
+joincfset=snoopy-rules
+procallin=no
+
+type=SingleWithThreshold
+ptype=Cached
+pattern=parsedjson
+continue=TakeNext
+context=!NOISY_$+{gamemeta!Host}
+desc=A lot of activity detected on $+{gamemeta!Host}
+thresh=500
+window=60
+action=create NOISY_$+{gamemeta!Host} 800; \
+assign %output "resource":"$+{gamemeta!Host}","event":"Noisy command execution on $+{gamemeta!Host}","correlate":["Noisy command execution on $+{gamemeta!Host}"],"severity":"informational","value":"CMD execution via SSH","text":"More than 1000 cmds per minute","origin":"$+{topic}","service":["$+{program}"],"type":"$+{facilty}","attributes":{},"tags":[],"group":null,"timeout":900,"environment":"Production","rawData":null; \
+write %outputpipe {"timestamp":%{u},%output}
+
+
+type=Single
+ptype=Cached
+pattern=parsedjson
+continue=TakeNext
+context=parsedjson :> ( sub { return ($_[0]->{"filename"} =~ m/((?i)tcpdump|nmap)/); } )
+desc=Suspicious tools executed
+action=assign %value $+{filename}; assign %text Likely suspicious tool $+{filename} executed; assign %event -; \
+lcall %json parsedjson :> ( sub { SecJson::alertajson($_[0]) } );
+
+
+### Left here as food for thought ###
+
+#type=Single
+#ptype=Cached
+#pattern=parsedjson
+#continue=TakeNext
+#context=SSH_ACTIVE_$+{gamemeta!Host}_$+{ssh!src_ip}_$+{ssh!src_port}
+#desc=Add data to active SSH session for $+{gamemeta!Host} from $+{ssh!src_ip}_$+{ssh!src_port} 
+#action=add SSH_ACTIVE_$+{gamemeta!Host}_$+{ssh!src_ip}_$+{ssh!src_port} $+{cmd}\n; \
+#set SSH_ACTIVE_$+{gamemeta!Host}_$+{ssh!src_ip}_$+{ssh!src_port} 10
+
+# NOTE: Context can also be activated from SSHD logs
+#type=Single
+#ptype=Cached
+#pattern=parsedjson
+#continue=TakeNext
+#context=!SSH_ACTIVE_$+{gamemeta!Host}_$+{ssh!src_ip}_$+{ssh!src_port}
+#desc=SSH session active on SSH_ACTIVE_$+{gamemeta!Host}_$+{ssh!src_ip}_$+{ssh!src_port}
+#action=create SSH_ACTIVE_$+{gamemeta!Host}_$+{ssh!src_ip}_$+{ssh!src_port} 180 (add SSH_ACTIVE_$+{gamemeta!Host}_$+{ssh!src_ip}_$+{ssh!src_port} "}; report SSH_ACTIVE_$+{gamemeta!Host}_$+{ssh!src_ip}_$+{ssh!src_port} /usr/bin/tee /opt/sec/outputpipe); \
+#add SSH_ACTIVE_$+{gamemeta!Host}_$+{ssh!src_ip}_$+{ssh!src_port} {"createTime":%{u},"resource":"$+{gamemeta!Dest!Host}","event":"$+{gamemeta!Src!IP} -> $+{gamemeta!Dest!Host}","correlate":["$+{gamemeta!Src!IP} -> $+{gamemeta!Dest!IP}","$+{gamemeta!Dest!IP} -> $+{gamemeta!Src!IP}","$+{gamemeta!Src!IP} -> $+{gamemeta!Dest!Host}","$+{gamemeta!Dest!IP} -> $+{gamemeta!Src!Host}","$+{gamemeta!Src!Host} -> $+{gamemeta!Dest!Host}","$+{gamemeta!Dest!Host} -> $+{gamemeta!Src!Host}"],"severity":"informational","value":"SSH session observed","text":"Expand and enable Raw Data for more details","origin":"$+{topic}","service":["$+{program}"],"type":"$+{facilty}","attributes":{},"tags":[],"group":null,"timeout":900,"environment":"Production","rawData":"; \
+#add SSH_ACTIVE_$+{gamemeta!Host}_$+{ssh!src_ip}_$+{ssh!src_port} $+{cmd}\n; 

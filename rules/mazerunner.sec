@@ -1,0 +1,23 @@
+type=Options
+joincfset=mazerunner-rules
+procallin=no
+
+type=Single
+ptype=Cached
+pattern=parsedjson
+continue=TakeNext
+context=!NOISY_$+{gamemeta!Src!Host}_$+{gamemeta!Dest!Host}_$+{cef!Extensions!pp} && parsedjson :> ( sub { $_[0]->{"service"} = "alert"; return True; } )
+desc=$+{gamemeta!Src!Host} -> $+{gamemeta!Dest!Host}: Anomalous $+{cef!Extensions!pp}
+action=assign %value Request from $+{gamemeta!Src!IP}; assign %text Likely anomalous $+{cef!Extensions!pp}; assign %event -; \
+lcall %json parsedjson :> ( sub { SecJson::alertajson($_[0]) } ); \
+write %outputpipe %json;
+
+type=SingleWithThreshold
+ptype=Cached
+pattern=parsedjson
+continue=TakeNext
+context=!NOISY_$+{gamemeta!Src!Host}_$+{gamemeta!Dest!Host}_$+{cef!Extensions!pp}
+desc=A lot of activity detected on NOISY_$+{gamemeta!Src!Host}_$+{gamemeta!Dest!Host}_$+{cef!Extensions!pp} pair
+thresh=100
+window=60
+action=create NOISY_$+{gamemeta!Src!Host}_$+{gamemeta!Dest!Host}_$+{cef!Extensions!pp} 60

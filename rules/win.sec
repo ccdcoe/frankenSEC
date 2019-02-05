@@ -1,0 +1,24 @@
+type=Options
+joincfset=win-rules
+procallin=no
+
+type=Single
+ptype=Cached
+pattern=parsedjson
+continue=TakeNext
+context=parsedjson :> ( sub { return (exists $_[0]->{"TargetUserName"} && (index $_[0]->{"Category"},"Logon") >= 0 && (index $_[0]->{"EventType"},"AUDIT_FAILURE") >= 0); } )
+desc=Login failed on $+{gamemeta!Host}
+action=assign %value GetLogonType; assign %text Login failed for user $+{TargetUserName} from $+{IpAddress}; assign %event $+{IpAddress} -> $+{gamemeta!Host}; \
+lcall %json parsedjson :> ( sub { SecJson::alertajson($_[0]) } ); \
+write %outputpipe %json; \
+create LOGIN_FAILED_$+{gamemeta!Host}
+
+
+type=Single
+ptype=Cached
+pattern=parsedjson
+context=parsedjson :> ( sub { return (exists $_[0]->{"TargetUserName"} && (index $_[0]->{"Category"},"Kerberos Authentication Service") >= 0 && (index $_[0]->{"EventType"},"AUDIT_FAILURE") >= 0); } )
+desc=Kerberos authentication failed on $+{gamemeta!Host}
+action=lcall %json parsedjson :> ( sub { $_[0]->{'text'} = "Kerberos authentication failed for user $_[0]->{'TargetUserName'} from $_[0]->{'IpAddress'}"; $_[0]->{'resource'} = $_[0]->{'gamemeta!Host'}; $_[0]->{'event'} = "Kerberos authentication failed on $_[0]->{'gamemeta!Host'}"; return JSON->new->utf8->allow_unknown->encode($_[0]); } ); \
+write %outputpipe %json; \
+create LOGIN_FAILED_$+{gamemeta!Host}

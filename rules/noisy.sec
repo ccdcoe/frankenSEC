@@ -1,0 +1,12 @@
+type=Options
+joincfset=noisy-rules
+procallin=no
+
+type=SingleWithThreshold
+ptype=RegExp
+pattern=NOISYHOST_(?<hostname>\S+)
+desc=NOISYHOST_(?<hostname>\S+)
+thresh=3
+window=3600
+action=event NOTIFY_S-$+{hostname}_T-_TN-_TT-HOST_PN-This host has been captured in hundreds of alerts over the past hour_PP-ids_PE-Alerts_URL-_ENDEVENT
+

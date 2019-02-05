@@ -1,0 +1,56 @@
+type=Options
+joincfset=usermgmt-rules
+procallin=no
+
+# User account added, removed, modified, etc
+type=Single
+ptype=Cached
+pattern=parsedjson
+context=parsedjson :> ( sub { return ((index $_[0]->{"message"},"new user: name") >= 0 ); } )
+desc="resource":"$+{gamemeta!Host}","event":"User accounts on $+{gamemeta!Host}","correlate":["User accounts on $+{gamemeta!Host}"],"severity":"security","value":"A new user account added to the system","text":"$+{message}","origin":"$+{topic}","service":["$+{program}"],"type":"$+{facilty}","attributes":{},"tags":[],"group":null,"timeout":900,"environment":"Production","rawData":null
+action=write %outputpipe {"timestamp":%{u},%s}
+
+type=Single
+ptype=Cached
+pattern=parsedjson
+context=parsedjson :> ( sub { return ((index $_[0]->{"message"},"delete user ") >= 0 ); } )
+desc="resource":"$+{gamemeta!Host}","event":"User accounts on $+{gamemeta!Host}","correlate":["User accounts on $+{gamemeta!Host}"],"severity":"security","value":"User account was deleted from the system","text":"$+{message}","origin":"$+{topic}","service":["$+{program}"],"type":"$+{facilty}","attributes":{},"tags":[],"group":null,"timeout":900,"environment":"Production","rawData":null
+action=write %outputpipe {"timestamp":%{u},%s}
+
+type=Single
+ptype=Cached
+pattern=parsedjson
+context=parsedjson :> ( sub { return ((index $_[0]->{"message"},"changed user ") >= 0 && (index $_[0]->{"message"}," information ") >= 0 ); } )
+desc="resource":"$+{gamemeta!Host}","event":"User accounts on $+{gamemeta!Host}","correlate":["User accounts on $+{gamemeta!Host}"],"severity":"informational","value":"User account information was edited on the system","text":"$+{message}","origin":"$+{topic}","service":["$+{program}"],"type":"$+{facilty}","attributes":{},"tags":[],"group":null,"timeout":900,"environment":"Production","rawData":null
+action=write %outputpipe {"timestamp":%{u},%s}
+
+# Groups added, removed, etc
+type=Single
+ptype=Cached
+pattern=parsedjson
+context=parsedjson :> ( sub { return ((index $_[0]->{"message"},"new group: name") >= 0 ); } )
+desc="resource":"$+{gamemeta!Host}","event":"Groups on $+{gamemeta!Host}","correlate":["Groups on $+{gamemeta!Host}"],"severity":"security","value":"A new group added to the system","text":"$+{message}","origin":"$+{topic}","service":["$+{program}"],"type":"$+{facilty}","attributes":{},"tags":[],"group":null,"timeout":900,"environment":"Production","rawData":null
+action=write %outputpipe {"timestamp":%{u},%s}
+
+type=Single
+ptype=Cached
+pattern=parsedjson
+context=parsedjson :> ( sub { return ((index $_[0]->{"message"},"removed group ") >= 0 || (index $_[0]->{"message"},"removed shadow group ") >= 0 ); } )
+desc="resource":"$+{gamemeta!Host}","event":"Groups on $+{gamemeta!Host}","correlate":["Groups on $+{gamemeta!Host}"],"severity":"security","value":"A group was removed from the system","text":"$+{message}","origin":"$+{topic}","service":["$+{program}"],"type":"$+{facilty}","attributes":{},"tags":[],"group":null,"timeout":900,"environment":"Production","rawData":null
+action=write %outputpipe {"timestamp":%{u},%s}
+
+# password changes
+type=Single
+ptype=Cached
+pattern=parsedjson
+context=parsedjson :> ( sub { return ((index $_[0]->{"message"},"password changed for root") >= 0 ); } )
+desc="resource":"$+{gamemeta!Host}","event":"User accounts on $+{gamemeta!Host}","correlate":["User accounts on $+{gamemeta!Host}"],"severity":"security","value":"Password changed for root user account","text":"$+{message}","origin":"$+{topic}","service":["$+{program}"],"type":"$+{facilty}","attributes":{},"tags":[],"group":null,"timeout":900,"environment":"Production","rawData":null
+action=write %outputpipe {"timestamp":%{u},%s}
+
+type=Single
+ptype=Cached
+pattern=parsedjson
+context=parsedjson :> ( sub { return ((index $_[0]->{"message"},"password changed for ") >= 0 ); } )
+desc="resource":"$+{gamemeta!Host}","event":"User accounts on $+{gamemeta!Host}","correlate":["User accounts on $+{gamemeta!Host}"],"severity":"informational","value":"Password changed for a user account","text":"$+{message}","origin":"$+{topic}","service":["$+{program}"],"type":"$+{facilty}","attributes":{},"tags":[],"group":null,"timeout":900,"environment":"Production","rawData":null
+action=write %outputpipe {"timestamp":%{u},%s}
+

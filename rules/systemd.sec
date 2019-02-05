@@ -1,0 +1,47 @@
+type=Options
+joincfset=systemd-rules
+procallin=no
+
+type=Single
+ptype=Cached
+pattern=parsedjson
+continue=TakeNext
+context=SYSLOG_STOPPED_$+{gamemeta!Host} && parsedjson :> ( sub { return ((index $_[0]->{"message"},"Started System Logging Service") >= 0 ); } )
+desc="resource":"$+{gamemeta!Host}","event":"Syslog on $+{gamemeta!Host}","correlate":["Syslog on $+{gamemeta!Host}"],"severity":"informational","value":"Syslog service started again on $+{gamemeta!Host}","text":"$+{message}","origin":"$+{topic}","service":["$+{program}"],"type":"$+{facilty}","attributes":{},"tags":[],"group":null,"timeout":300,"environment":"Production","rawData":null
+action=delete SYSLOG_STOPPED_$+{gamemeta!Host}; write %outputpipe {"timestamp":%{u},%s}
+
+type=SingleWithThreshold
+ptype=Cached
+pattern=parsedjson
+continue=TakeNext
+context=SYSLOG_STOPPED_$+{gamemeta!Host}
+desc=We are still receiveing messages for $+{gamemeta!Host}
+action=delete SYSLOG_STOPPED_$+{gamemeta!Host}
+window=120
+thresh=3
+
+type=PairWithWindow
+ptype=Cached
+continue=TakeNext
+pattern=parsedjson
+context=parsedjson :> ( sub { return ((index $_[0]->{"message"},"Stopping System Logging Service") >= 0 ); } )
+desc="resource":"$+{gamemeta!Host}","event":"Syslog on $+{gamemeta!Host}","correlate":["Syslog on $+{gamemeta!Host}","syslog"],"severity":"security","value":"Syslog service stopped on $+{gamemeta!Host}","text":"$+{message}","origin":"$+{topic}","service":["$+{program}"],"type":"$+{facilty}","attributes":{},"tags":[],"group":null,"timeout":1200,"environment":"Production","rawData":null
+action=create SYSLOG_STOPPED_$+{gamemeta!Host}; write %outputpipe {"timestamp":%{u},%s}
+ptype2=Cached
+pattern2=parsedjson
+context2=parsedjson :> ( sub { return ((index $_[0]->{"message"},"Started System Logging Service") >= 0 ); } )
+desc2="resource":"$+{gamemeta!Host}","event":"Syslog on $+{gamemeta!Host}","correlate":["Syslog on $+{gamemeta!Host}","syslog"],"severity":"informational","value":"Syslog service restarted on $+{gamemeta!Host}","text":"$+{message}","origin":"$+{topic}","service":["$+{program}"],"type":"$+{facilty}","attributes":{},"tags":[],"group":null,"timeout":300,"environment":"Production","rawData":null
+action2=write %outputpipe {"timestamp":%{u},%s}
+window=15
+
+#Shutdowns, reboots
+type=Single
+ptype=Cached
+pattern=parsedjson
+continue=TakeNext
+context=parsedjson :> ( sub { return ((index $_[0]->{"message"},"Stopping ACPI event daemon") >= 0 ); } )
+desc="resource":"$+{gamemeta!Host}","event":"Shutdown of $+{gamemeta!Host}","correlate":["Shutdown of $+{gamemeta!Host}"],"severity":"critical","value":"Shutdown process observed for $+{gamemeta!Host}","text":"$+{message}","origin":"$+{topic}","service":["$+{program}"],"type":"$+{facilty}","attributes":{},"tags":[],"group":null,"timeout":900,"environment":"Production","rawData":null
+action=delete SYSLOG_STOPPED_$+{gamemeta!Host}; write %outputpipe {"timestamp":%{u},%s}
+
+
+

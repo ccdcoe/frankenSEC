@@ -1,0 +1,182 @@
+# Parse all JSON messages into 'parsedjson' varmap
+type=Single
+ptype=PerlFunc
+pattern=sub { if ($_[0] =~ /(\s*\{.+\})/) { return SecJson::json2matchvar($1); } return 0; }
+varmap=parsedjson
+continue=TakeNext
+desc=parsedjson
+action=none
+
+# Quick and dirty switchback for pretty hostnames where the host is not in gamenet inventory
+# Kerrigan replaces unknown hosts
+type=Single
+ptype=Cached
+pattern=parsedjson
+context=parsedjson :> ( sub { return ((exists $_[0]->{"gamemeta!Src!Host"} && $_[0]->{"gamemeta!Src!Host"} eq "Kerrigan") || (exists $_[0]->{"gamemeta!Dest!Host"} && $_[0]->{"gamemeta!Dest!Host"} eq "Kerrigan")); } )
+continue=TakeNext
+desc=replace Kerrigan SRC or DEST host
+action=lcall %replace parsedjson :> ( sub { if ($_[0]->{"gamemeta!Src!Host"} eq "Kerrigan") {$_[0]->{"gamemeta!Src!Host"} = $_[0]{"gamemeta!Src!IP"};}  \
+if ($_[0]->{"gamemeta!Dest!Host"} eq "Kerrigan") {$_[0]->{"gamemeta!Dest!Host"} = $_[0]{"gamemeta!Dest!IP"};} \
+ return; } ); 
+
+
+###  Suricata ###
+#type=Suppress
+#ptype=Cached
+#pattern=parsedjson
+#context=parsedjson :> ( sub { return (exists $_[0]->{"alert!severity"} && $_[0]->{"alert!severity"} > 2 ); } )
+#desc=Suppress alert severity 3 (and higher)
+
+type=Suppress
+ptype=Cached
+pattern=parsedjson
+context=parsedjson :> ( sub { return ($_[0]->{"syslog_program"} eq "suricata" && exists $_[0]->{"http!url"} && (index $_[0]->{"http!url"},"udhisapi.dll") >= 0 ); } )
+desc=Suppress benign Windows UPnP alerts
+
+type=Jump
+ptype=Cached
+pattern=parsedjson
+context=parsedjson :> ( sub { return ($_[0]->{"syslog_program"} eq "suricata"); } )
+desc=suricata-rules
+cfset=suricata-rules
+# Not only alerts, but also consider parser specific events (SMB, DNS, etc...)
+
+### Snoopy ###
+type=Jump
+ptype=Cached
+pattern=parsedjson
+context=parsedjson :> ( sub { return ($_[0]->{"syslog_program"} eq "snoopy" && exists $_[0]->{"ssh!dst_port"}); } )
+desc=snoopy-rules
+cfset=snoopy-rules
+
+
+### Windows ###
+type=Jump
+ptype=Cached
+pattern=parsedjson
+context=parsedjson :> ( sub { return ($_[0]->{"SourceName"} eq "Microsoft-Windows-Security-Auditing"); } )
+desc=win-rules
+cfset=win-rules
+
+### Sysmon ###
+type=Jump
+ptype=Cached
+pattern=parsedjson
+context=parsedjson :> ( sub { return ($_[0]->{"SourceName"} eq "Microsoft-Windows-Sysmon"); } )
+desc=sysmon-rules
+cfset=sysmon-rules
+
+### Apache ###
+type=Jump
+ptype=Cached
+pattern=parsedjson
+context=parsedjson :> ( sub { return ($_[0]->{"syslog_program"} eq "apache"); } )
+desc=apache-rules
+cfset=apache-rules
+
+### SSH ###
+type=Jump
+ptype=Cached
+pattern=parsedjson
+context=parsedjson :> ( sub { return ($_[0]->{"syslog_program"} eq "sshd" && (index $_[0]->{"message"}," from ") >= 0 ); } )
+desc=sshd-rules
+cfset=sshd-rules
+
+
+
+### Systemd events ###
+type=Jump
+ptype=Cached
+pattern=parsedjson
+context=parsedjson :> ( sub { return ($_[0]->{"syslog_program"} eq "systemd"); } )
+desc=systemd-rules
+cfset=systemd-rules
+
+
+### Zeek events ###
+#Quite random check for detecting zeek/bro, but works for now #FIXME
+type=Jump
+ptype=Cached
+pattern=parsedjson
+context=parsedjson :> ( sub { return exists $_[0]->{"id.orig_h"} } )
+desc=zeek-rules
+cfset=zeek-rules
+
+### Mazerunner
+type=Jump
+ptype=Cached
+pattern=parsedjson
+context=parsedjson :> ( sub { return (exists $_[0]->{"cef!DeviceVendor"} && $_[0]->{"cef!DeviceVendor"} eq "Cymmetria") } )
+desc=mazerunner-rules
+cfset=mazerunner-rules
+
+### Linux user-related events ###
+type=Jump
+ptype=Cached
+pattern=parsedjson
+context=parsedjson :> ( sub { return ($_[0]->{"syslog_program"} eq "useradd" || $_[0]->{"syslog_program"} eq "groupadd" || $_[0]->{"syslog_program"} eq "passwd" || $_[0]->{"syslog_program"} eq "userdel" || $_[0]->{"syslog_program"} eq "chfn"); } )
+desc=usermgmt-rules
+cfset=usermgmt-rules
+
+### FTP ###
+type=Jump
+ptype=Cached
+pattern=parsedjson
+context=parsedjson :> ( sub { return ($_[0]->{"syslog_program"} eq "pure-ftpd" || $_[0]->{"syslog_program"} eq "vsftpd"); } )
+desc=ftp-rules
+cfset=ftp-rules
+
+### Internal events ###
+type=Jump
+ptype=SubStr
+pattern=NOISY
+cfset=noisy-rules
+
+
+
+#type=Jump
+#ptype=Cached
+#pattern=parsedjson
+#context=parsedjson :> ( sub { return ($_[0]->{"syslog_program"} eq "kernel"); } )
+#desc=kernel-rules
+#cfset=kernel-rules
+
+#type=Jump
+#ptype=Cached
+#pattern=parsedjson
+#context=parsedjson :> ( sub { return ($_[0]->{"syslog_program"} eq "nagios"); } )
+#desc=software-rules
+#cfset=software-rules
+
+### Older jump style
+
+#type=Jump
+#ptype=SubStr
+#pattern="event_type":"flow"
+#cfset=suricata-flows
+#
+#type=Jump
+#ptype=RegExp
+#pattern=(?i)postfix/smtpd\[\d+\]:
+#cfset=mail-rules
+#
+#type=Jump
+#ptype=RegExp
+#pattern=(?i)(?:openwebmail|Roundcube|dovecot):
+#cfset=mail-rules
+
+#type=Jump
+#ptype=SubStr
+#pattern=AUTH_FAILURE_
+#cfset=auth-rules
+#
+#type=Jump
+#ptype=SubStr
+#pattern=AUTH_CONN_FAILURE_
+#cfset=auth-rules
+#
+#type=Jump
+#ptype=SubStr
+#pattern=AUTH_MULTIPLE_FAILURES_
+#cfset=auth-rules
+

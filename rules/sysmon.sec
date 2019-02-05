@@ -1,0 +1,24 @@
+type=Options
+joincfset=sysmon-rules
+procallin=no
+
+type=Single
+ptype=Cached
+pattern=parsedjson
+continue=TakeNext
+context=parsedjson :> ( sub { return (exists $_[0]->{"CommandLine"} && (index $_[0]->{"CommandLine"},"advfirewall") >= 0); } )
+desc=Win Firewall configuration
+action=assign %value $+{Description}; assign %text $+{CommandLine}; assign %event -; \
+lcall %json parsedjson :> ( sub { SecJson::alertajson($_[0]) } ); \
+write %outputpipe %json;
+
+
+type=Single
+ptype=Cached
+pattern=parsedjson
+continue=TakeNext
+context=parsedjson :> ( sub { return ($_[0]->{"ParentCommandLine"} =~ m/((?i)-encodedcommand)/); } )
+desc=Encoded PowerShell command execution
+action=assign %value Encoded PowerShell command execution; assign %text $+{ParentCommandLine}; assign %event -; \
+lcall %json parsedjson :> ( sub { SecJson::alertajson($_[0]) } ); \
+write %outputpipe %json;

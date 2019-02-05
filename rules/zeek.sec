@@ -1,0 +1,23 @@
+type=Options
+joincfset=zeek-rules
+procallin=no
+
+type=Single
+ptype=Cached
+pattern=parsedjson
+continue=TakeNext
+context=!NOISY_$+{gamemeta!Src!Host}_$+{gamemeta!Dest!Host}_$+{msg}
+desc=Zeek alert $+{gamemeta!Src!Host} -> $+{gamemeta!Dest!Host}: $+{msg}
+action=assign %value $+{gamemeta!Src!IP} -> $+{gamemeta!Dest!IP} $+{p}_$+{proto}; assign %text $+{msg}; assign %event -; \
+lcall %json parsedjson :> ( sub { SecJson::alertajson($_[0]) } ); \
+write %outputpipe %json;
+
+type=SingleWithThreshold
+ptype=Cached
+pattern=parsedjson
+continue=TakeNext
+context=!NOISY_$+{gamemeta!Src!Host}_$+{gamemeta!Dest!Host}_$+{msg}
+desc=Zeek alert $+{gamemeta!Src!Host} -> $+{gamemeta!Dest!Host}: $+{msg}
+thresh=100
+window=60
+action=create NOISY_$+{gamemeta!Src!Host}_$+{gamemeta!Dest!Host}_$+{msg} 60

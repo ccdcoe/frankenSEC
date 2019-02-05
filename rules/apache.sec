@@ -1,0 +1,216 @@
+type=Options
+joincfset=apache-rules
+procallin=no
+
+### TODO: This file still has legacy rules. Should be rewritten in the future to make use of SecJson::alertajson module ###
+
+type=Single
+ptype=Cached
+pattern=parsedjson
+continue=TakeNext
+desc=Parse original apache message and enrich
+action=lcall %o parsedjson :> ( sub { if ($_[0]->{"syslog_message"} =~ /(?:[\w\d:.-]+)? ?([a-f\d:.]+).+? (\d\d\d) (\d+) ".+" "(.+)?"$/) { $_[0]->{"src_ip"} = $1; $_[0]->{"rcode"} = $2; $_[0]->{"bytes"} = $3; $_[0]->{"ua"} = $4; } } );
+
+# Catch IPs that are getting too many 4xx or 5xx HTTP responses
+# NB! will fire off from NAT traffic, therefore mainly useful for cross-correlation
+type=SingleWithThreshold
+ptype=Cached
+pattern=parsedjson
+continue=TakeNext
+context=!HTTP_SCANNER_$+{src_ip} && parsedjson :> ( sub { return ($_[0]->{"rcode"} >= 400); } )
+desc=More than 50 errorneous HTTP response codes sent to client IP $+{src_ip}
+action=assign %output "resource":null,"event":"HTTP scanning by $+{src_ip}","correlate":["HTTP scanning by $+{src_ip}"],"severity":"major","value":"HTTP SCAN","text":"%s","origin":"$+{topic}","service":["$+{syslog_program}"],"type":"$+{syslog_facility}","attributes":{"source_ip":"$+{src_ip}"},"tags":[],"group":null,"timeout":900,"environment":"Production","rawData":null; \
+create HTTP_SCANNER_$+{src_ip} 800; \
+write %outputpipe {"timestamp":%{u},%output}
+window=60
+thresh=50
+
+# Similar to previous, but correlates both src and target host
+type=SingleWithThreshold
+ptype=Cached
+pattern=parsedjson
+continue=TakeNext
+context=!HTTP_SCANNER_$+{src_ip} && parsedjson :> ( sub { return ($_[0]->{"rcode"} >= 400); } )
+desc=Over 20 erroneous HTTP response codes sent by $+{gamemeta!Host} to client IP $+{src_ip}
+action=assign %output "resource":"$+{gamemeta!Host}","event":"$+{src_ip} -> $+{gamemeta!Host}","correlate":["$+{src_ip} -> $+{gamemeta!Host}"],"severity":"major","value":"HTTP SCAN","text":"%s","origin":"$+{topic}","service":["$+{syslog_program}"],"type":"$+{syslog_facility}","attributes":{"source_ip":"$+{src_ip}"},"tags":[],"group":null,"timeout":900,"environment":"Production","rawData":null; \
+write %outputpipe {"timestamp":%{u},%output}
+window=60
+thresh=20
+
+# Nasty tools often used by Red Teamers
+type=Single
+ptype=Cached
+pattern=parsedjson
+continue=TakeNext
+context=!BAD_UA_LOGGED_$+{src_ip}_$+{ua} && parsedjson :> ( sub { return ($_[0]->{"ua"} =~ m/((?i)sqlmap|owasp|dirbuster|nikto|badtunnel|nmap|gobuster)/); } )
+desc=Suspicious browser user-agent detected from $+{src_ip}
+action=assign %output "resource":"$+{gamemeta!Host}","event":"Suspicious browser User-Agent detected from $+{src_ip}","correlate":["Suspicious browser User-Agent detected from $+{src_ip}"],"severity":"major","value":"Suspicious tools","text":"$+{ua}","origin":"$+{topic}","service":["$+{syslog_program}"],"type":"$+{syslog_facility}","attributes":{"source_ip":"$+{src_ip}"},"tags":[],"group":null,"timeout":900,"environment":"Production","rawData":null; \
+write %outputpipe {"timestamp":%{u},%output}; \
+create BAD_UA_LOGGED_$+{src_ip}_$+{ua} 800
+
+# Empty user-agent
+type=Single
+ptype=Cached
+pattern=parsedjson
+continue=TakeNext
+context=!BAD_UA_LOGGED_$+{src_ip}_$+{ua} && parsedjson :> ( sub { return ($_[0]->{"ua"} eq "-"); } )
+desc=Empty browser user-agent detected from $+{src_ip}
+action=assign %output "resource":"$+{gamemeta!Host}","event":"%s","correlate":["%s"],"severity":"minor","value":"Suspicious tools","text":"$+{ua}","origin":"$+{topic}","service":["$+{syslog_program}"],"type":"$+{syslog_facility}","attributes":{"source_ip":"$+{src_ip}"},"tags":[],"group":null,"timeout":900,"environment":"Production","rawData":null; \
+write %outputpipe {"timestamp":%{u},%output}; \
+create BAD_UA_LOGGED_$+{src_ip}_$+{ua} 800
+
+
+
+# /etc/passwd inclusion attempt
+type=Single
+ptype=Cached
+pattern=parsedjson
+continue=TakeNext
+context=parsedjson :> ( sub { return ($_[0]->{"message"} =~ m/\s?(?:\S+)? ?(?:[a-f\d:.]+).+(?:etc\/\W*passwd)/); } )
+desc=Webapp injection: etc/passwd inclusion attempt by $+{src_ip}
+action=assign %output "resource":"$+{gamemeta!Host}","event":"$+{src_ip} -> $+{gamemeta!Host}","correlate":["$+{src_ip} -> $+{gamemeta!Host}"],"severity":"critical","value":"Sensitive files","text":"%s","origin":"$+{topic}","service":["$+{syslog_program}"],"type":"$+{syslog_facility}","attributes":{"source_ip":"$+{src_ip}"},"tags":[],"group":null,"timeout":900,"environment":"Production","rawData":null; \
+write %outputpipe {"timestamp":%{u},%output}
+
+# /etc/shadow inclusion attempt
+type=Single
+ptype=Cached
+pattern=parsedjson
+continue=TakeNext
+context=parsedjson :> ( sub { return ($_[0]->{"message"} =~ m/\s?(?:\S+)? ?(?:[a-f\d:.]+).+(?:etc\/\W*shadow)/); } )
+desc=Webapp injection: etc/shadow inclusion attempt by $+{src_ip}
+action=assign %output "resource":"$+{gamemeta!Host}","event":"$+{src_ip} -> $+{gamemeta!Host}","correlate":["$+{src_ip} -> $+{gamemeta!Host}"],"severity":"critical","value":"Sensitive files","text":"%s","origin":"$+{topic}","service":["$+{syslog_program}"],"type":"$+{syslog_facility}","attributes":{"source_ip":"$+{src_ip}"},"tags":[],"group":null,"timeout":900,"environment":"Production","rawData":null; \
+write %outputpipe {"timestamp":%{u},%output}
+
+
+
+
+### Commented, but left here as food for thought! ###
+# OS command injection
+
+# Path traversal
+# TODO: parse request path into a variable that can be reported
+# FIXME
+#type=Single
+#ptype=Cached
+#pattern=parsedjson
+#continue=TakeNext
+#context=parsedjson :> ( sub { return ($_[0]->{"message"} =~ m/\s?(?:\S+)? ?(?:[a-f\d:.]+).+(?:(?i:\.|\%2e){2,}(?:(?i:/|\\|\%2f|%c0%af)+)){2,}/); } )
+#desc=Webapp injection: path traversal from $+{src_ip}
+#action=assign %output "resource":"$+{gamemeta!Host}","event":"$+{src_ip} -> $+{gamemeta!Host}","correlate":["$+{src_ip} -> $+{gamemeta!Host}"],"severity":"critical","value":"Path traversal","text":"%s","origin":"$+{topic}","service":["$+{syslog_program}"],"type":"$+{syslog_facility}","attributes":{"source_ip":"$+{src_ip}"},"tags":[],"group":null,"timeout":900,"environment":"Production","rawData":null; \
+#write %outputpipe {"timestamp":%{u},%output}
+
+# Multiple useragents from common IP
+# NB! will fire off from NAT traffic, therefore only useful for cross-correlation
+# (?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+? \d+ ".+" "(?<useragent>.+)?"$
+#type=EventGroup
+#init=create USERAGENT_COUNTING_$+{remote_IP}
+#end=delete USERAGENT_COUNTING_$+{remote_IP}
+#continue=TakeNext
+#ptype=RegExp
+#pattern=(?<server>[\w.-]+) apache:\s?\S+? (?<remote_IP>[a-f\d:.]+).*? \d+ ".+" "(?<useragent>.+)?"$
+#context=!USERAGENT_COUNTED_$+{remote_IP}_$+{useragent}
+#count=alias USERAGENT_COUNTING_$+{remote_IP} USERAGENT_COUNTED_$+{remote_IP}_$+{useragent}
+#desc=Multiple distinct useragents from $+{remote_IP}
+#action=event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-HOST_PN-Multiple distinct user-agents detected for single IP_PP-apache_PE-Last match: on $+{server}_URL-_ENDEVENT
+#window=172800
+#thresh=3
+
+# Code injection
+## Simple script tags
+#type=Single
+#ptype=RegExp
+#continue=TakeNext
+#pattern=(?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+(?i:(?i:<|%3c)/?script(?i:>|%3e))
+#desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp injection: script tags
+#action=logonly; event CODE_INJECTION_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-%s_PP-apache_PE-%s_URL-_ENDEVENT
+#
+## Javascript injection
+#type=Single
+#ptype=RegExp
+#continue=TakeNext
+#pattern=(?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+(?:javascript\:)
+#desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp injection: javascript
+#action=logonly; event CODE_INJECTION_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-%s_PP-apache_PE-%s_URL-_ENDEVENT
+#
+#
+## SQL injection
+#
+## SELECT * FROM
+#type=Single
+#ptype=RegExp
+#pattern=(?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+(?i:select%\S*from)
+#desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp injection: SQL SELECT FROM statement
+#action=logonly; event SQL_INJECTION_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-%s_PP-apache_PE-%s_URL-_ENDEVENT
+#
+## UNION SELECT
+#type=Single
+#ptype=RegExp
+#pattern=(?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+(?i:union\S*select)
+#desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp injection: SQL UNION SELECT statement
+#action=logonly; event SQL_INJECTION_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-%s_PP-apache_PE-%s_URL-_ENDEVENT
+#
+## Blind sqli testing with sleep() and benchmark()
+#type=Single
+#ptype=RegExp
+#continue=TakeNext
+#pattern=(?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+(?i:(sleep\((\s*)(\d*)(\s*)\)|benchmark\((.*)\,(.*)\)))
+#desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp injection: Blind SQLi testing with sleep() or benchmark()
+#action=logonly; event SQL_INJECTION_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-%s_PP-apache_PE-%s_URL-_ENDEVENT
+#
+## Comment injection
+#type=Single
+#ptype=RegExp
+#continue=TakeNext
+#pattern=(?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+(?:\<!-|--\>|\/\*|\*\/)
+#desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp injection: common comment types
+#action=logonly; event COMMENT_INJECTION_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-%s_PP-apache_PE-%s_URL-_ENDEVENT
+#
+## NULL byte injection
+## %00
+#type=Single
+#ptype=RegExp
+#continue=TakeNext
+#pattern=(?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+%00
+#desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp injection: null byte
+#action=logonly; event BYTE_INJECTION_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-%s_PP-apache_PE-%s_URL-_ENDEVENT
+#
+## PHPIDS
+#type=Single
+#ptype=RegExp
+#continue=TakeNext
+#pattern=(?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+(?:(@import|;base64|alert[\s]?\(|expression[\s]?\(|urn[\s]?\(|fromCharcode[\s]?\(|decodeURIComponent[\s]?\(|eval[\s]?\(|Execute[\s]?\())
+#desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp injection: imported poisoned stylesheets, base64 attacks, vbscript probings and typical js injections
+#action=logonly; event CODE_INJECTION_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-%s_PP-apache_PE-%s_URL-_ENDEVENT
+#
+########################################################################################
+## known exploit patterns
+#
+#type=Single
+#ptype=RegExp
+#continue=TakeNext
+#pattern=(?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+//myadtoolz.net
+#desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp exploit
+#action=logonly; event EXPLOIT_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-%s_PP-apache_PE-%s_URL-_ENDEVENT
+#
+##type=Single
+##ptype=RegExp
+##pattern=(?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+cgi-bin.+((?:%\w{2})\+?)+ HTTP
+##desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp exploit: cgi-bin
+##action=logonly; event CGIBIN_EXPLOIT_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-%s_PP-apache_PE-%s_URL-_ENDEVENT
+#
+#type=Single
+#ptype=RegExp
+#continue=TakeNext
+#pattern=(?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+/\w+/(?:zologize|scripts)/\w+\.php
+#desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp exploit: myadmin
+#action=logonly; event MYADMIN_EXPLOIT_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-%s_PP-apache_PE-%s_URL-_ENDEVENT
+#
+############################
+## Strange user agent
+#
+#type=Single
+#ptype=RegExp
+#pattern=(?<server>[\w-]+) apache:\s?(?<vhost>\S+)? (?<remote_IP>[a-f\d:.]+).+(?i:"BOT/0\.1 \(BOT for JCE\)")$
+#desc=$+{vhost} | $+{remote_IP} | $+{server} | webapp user-agent: JCE BOT
+#action=logonly; event JCEBOT_USERAGENT_WEBAPP_$+{server}_$+{remote_IP}_$+{vhost}; event NOTIFY_S-$+{remote_IP}_T-_TN-$+{server}_TT-host_PN-%s_PP-apache_PE-%s_URL-_ENDEVENT
+#
