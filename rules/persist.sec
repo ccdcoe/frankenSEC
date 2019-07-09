@@ -1,3 +1,20 @@
+# Assign project path variable
+type=Single
+ptype=SubStr
+pattern=SEC_STARTUP
+context=SEC_INTERNAL_EVENT
+continue=TakeNext
+desc=generic
+action=assign %root /var/lib/sec
+
+type=Single
+ptype=SubStr
+pattern=SEC_STARTUP
+context=SEC_INTERNAL_EVENT
+continue=TakeNext
+desc=out.fifo
+action=assign %outputpipe %root/pipes/%s
+
 type=Single
 ptype=SubStr
 pattern=SEC_STARTUP
@@ -11,32 +28,15 @@ type=Single
 ptype=SubStr
 pattern=SEC_SHUTDOWN
 context=SEC_INTERNAL_EVENT
-desc=Save all SEC contexts into PROJECTPATH/var/SEC_CONTEXTS on shutdown
+desc=Save all SEC contexts into /var/lib/sec/contexts/SEC_CONTEXTS on shutdown
 action=lcall %ret -> ( sub { \
-       Storable::store(\%main::context_list, "PROJECTPATH/var/SEC_CONTEXTS"); } )
+       Storable::store(\%main::context_list, "/var/lib/sec/contexts/SEC_CONTEXTS"); } )
 
-
-# Assign input and output named pipe paths to variables
+# Load all previously stored contexts
 type=Single
 ptype=SubStr
 pattern=SEC_STARTUP
 context=SEC_INTERNAL_EVENT
-continue=TakeNext
-desc=generic
-action=assign %genericpipe PROJECTPATH/inputs/%s
-
-type=Single
-ptype=SubStr
-pattern=SEC_STARTUP
-context=SEC_INTERNAL_EVENT
-continue=TakeNext
-desc=outputpipe
-action=assign %outputpipe PROJECTPATH/%s
-
-type=Single
-ptype=SubStr
-pattern=SEC_STARTUP
-context=SEC_INTERNAL_EVENT
-desc=Restore all SEC contexts from PROJECTPATH/var/SEC_CONTEXTS on startup
+desc=Restore all SEC contexts from /var/lib/sec/contexts/SEC_CONTEXTS on startup
 action=lcall %ret -> ( sub { %main::context_list = \
-       %{Storable::retrieve("PROJECTPATH/var/SEC_CONTEXTS")}; } )
+       %{Storable::retrieve("/var/lib/sec/contexts/SEC_CONTEXTS")}; } )
