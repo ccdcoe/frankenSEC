@@ -290,7 +290,6 @@ def normalizeIP(addr):
     addr = normalizeIPv6(addr) if str(addr).find(":")>=0 else addr
     return addr
 
-
 ### Generating text from alerts
 def genText(data):
     if "text" in data:
@@ -312,7 +311,6 @@ def genService(data):
     else:
         return ["-"]
 
-
 # == Send POST data to Alerta
 def sendPost(line):
     data = dict()
@@ -331,7 +329,6 @@ def sendPost(line):
         print("{} {}".format(str(resp.status_code), resp.reason))
     except Exception as err:
         print(err)
-
 
 def main(argv):
     #Sanity checks
@@ -357,7 +354,6 @@ def main(argv):
             print("") # Cosmetics for console readability
             LOG.info("Keyboard interrupt (CTRL+C) received. Exiting...")
             sys.exit(3)
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(allow_abbrev=True,
