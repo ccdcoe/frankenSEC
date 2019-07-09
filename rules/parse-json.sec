@@ -5,7 +5,7 @@ ptype=SubStr
 pattern=SEC_STARTUP
 context=SEC_INTERNAL_EVENT
 desc=load SecJson.pm module
-action=eval %o ( require '/opt/sec/rules/parsing-json/SecJson.pm' ); \
+action=eval %o ( require 'PROJECTPATH/rules/parsing-json/SecJson.pm' ); \
        if %o ( logonly Module SecJson.pm loaded ) \
         else ( logonly Failed to load SecJson.pm; eval %o exit(1) )
 

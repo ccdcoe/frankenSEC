@@ -7,22 +7,13 @@ desc=Load the Storable module and terminate if it is not found
 action=eval %ret (require Storable); \
        if %ret ( logonly Storable loaded ) else ( eval %o exit(1) )
 
-
-type=Single
-ptype=SubStr
-pattern=SEC_STARTUP
-context=SEC_INTERNAL_EVENT
-desc=Restore all SEC contexts from /opt/sec/var/SEC_CONTEXTS on startup
-action=lcall %ret -> ( sub { %main::context_list = \
-       %{Storable::retrieve("/opt/sec/var/SEC_CONTEXTS")}; } )
-
 type=Single
 ptype=SubStr
 pattern=SEC_SHUTDOWN
 context=SEC_INTERNAL_EVENT
-desc=Save all SEC contexts into /opt/sec/var/SEC_CONTEXTS on shutdown
+desc=Save all SEC contexts into PROJECTPATH/var/SEC_CONTEXTS on shutdown
 action=lcall %ret -> ( sub { \
-       Storable::store(\%main::context_list, "/opt/sec/var/SEC_CONTEXTS"); } )
+       Storable::store(\%main::context_list, "PROJECTPATH/var/SEC_CONTEXTS"); } )
 
 
 # Assign input and output named pipe paths to variables
@@ -32,7 +23,7 @@ pattern=SEC_STARTUP
 context=SEC_INTERNAL_EVENT
 continue=TakeNext
 desc=generic
-action=assign %genericpipe /opt/sec/inputs/%s
+action=assign %genericpipe PROJECTPATH/inputs/%s
 
 type=Single
 ptype=SubStr
@@ -40,4 +31,12 @@ pattern=SEC_STARTUP
 context=SEC_INTERNAL_EVENT
 continue=TakeNext
 desc=outputpipe
-action=assign %outputpipe /opt/sec/%s
+action=assign %outputpipe PROJECTPATH/%s
+
+type=Single
+ptype=SubStr
+pattern=SEC_STARTUP
+context=SEC_INTERNAL_EVENT
+desc=Restore all SEC contexts from PROJECTPATH/var/SEC_CONTEXTS on startup
+action=lcall %ret -> ( sub { %main::context_list = \
+       %{Storable::retrieve("PROJECTPATH/var/SEC_CONTEXTS")}; } )
