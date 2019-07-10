@@ -1,22 +1,30 @@
 #!/usr/bin/python3
 
 import argparse
-from alerta_config import header, alerta_srv
 import json
 import requests
 import time
 import logging
-import iso8601 #pip3 install iso8601
 import socket
 import sys
 import re
 import os
 import errno
 
+#pip3 install iso8601
+import iso8601
+
 # from alertaclient.api import Client
 LOG = logging.getLogger("sec2alerta")
 logging.basicConfig(format="%(asctime)s - %(name)s: %(levelname)s - %(message)s", level=logging.DEBUG)
 
+header = {"Content-type": "application/json"}
+if "ALERTA_ENDPOINT" in os.environ:
+    alerta_srv = os.environ["ALERTA_ENDPOINT"]
+    LOG.debug("Using alerta endpoint {} from environment".format(alerta_srv))
+else:
+    alerta_srv = "http://localhost:8080/api/alert"
+    LOG.debug("Using default alerta endpoint {}".format(alerta_srv))
 
 TS_KEYS = ["timestamp", '@timestamp']
 metakey = "gamemeta"
@@ -383,5 +391,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(sys.argv[1:])    
-
-
